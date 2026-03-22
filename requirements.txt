@@ -1,5 +1,6 @@
 # Docling RapidOCR：必须能 `import rapidocr` + `import onnxruntime`（与包名 rapidocr-onnxruntime 无关）
 # Linux 云端若 onnxruntime 装不上，可改为只保留：onnxruntime-cpu>=1.17.0
+# libGL.so.1：在仓库根目录放 packages.txt（含 libgl1），Streamlit Cloud 会 apt 安装系统库
 # 可选兜底（体积大、构建慢）：easyocr —— 仅当 rapidocr/onnxruntime 在云端装不上时再手动加入
 streamlit
 langchain-openai
