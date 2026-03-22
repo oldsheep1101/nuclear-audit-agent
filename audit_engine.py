@@ -22,7 +22,11 @@ from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
 from docling.datamodel.base_models import InputFormat
 from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling.datamodel.pipeline_options import RapidOcrOptions, ThreadedPdfPipelineOptions
+from docling.datamodel.pipeline_options import (
+    OcrAutoOptions,
+    RapidOcrOptions,
+    ThreadedPdfPipelineOptions,
+)
 
 # --- 显式指定 OCR 配置类：优先尝试旧包路径，不存在则用 datamodel（当前版本仅有后者）---
 try:
@@ -119,6 +123,16 @@ def _cjk_ratio(text: str) -> float:
     return n / max(len(text), 1)
 
 
+def _rapidocr_stack_available() -> bool:
+    """Docling 的 RapidOCR 后端需要同时能 import onnxruntime 与 rapidocr。"""
+    try:
+        import onnxruntime  # noqa: F401
+        import rapidocr  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def _extract_text_pypdf(pdf_path: str) -> str:
     """直接从 PDF 文字层抽取（当 Docling 走布局/OCR 反而更差时作为对照）。"""
     from pypdf import PdfReader
@@ -133,16 +147,24 @@ def _extract_text_pypdf(pdf_path: str) -> str:
 
 
 def _document_converter_for_chinese_pdf() -> DocumentConverter:
-    """很多中文标准 PDF 内嵌字形映射错误；整页 RapidOCR + 强制 CPU/限线程，避免无 GPU 环境报错。"""
+    """很多中文标准 PDF 内嵌字形映射错误；优先整页 RapidOCR，云端未装包时回退自动 OCR。"""
     pipeline_options = ThreadedPdfPipelineOptions()
     pipeline_options.do_ocr = True
     pipeline_options.images_scale = 2.0
 
-    ocr_options = RapidOcrOptionsEngine(
-        lang=["ch_sim", "en"],
-        force_full_page_ocr=True,
-    )
-    pipeline_options.ocr_options = ocr_options
+    # 若强制 RapidOcrOptions 但环境未 pip install rapidocr/onnxruntime，会在 convert 时抛错
+    if _rapidocr_stack_available():
+        pipeline_options.ocr_options = RapidOcrOptionsEngine(
+            lang=["ch_sim", "en"],
+            force_full_page_ocr=True,
+        )
+    else:
+        print(
+            "--- ⚠️ 未检测到 rapidocr 或 onnxruntime，已改用 Docling 自动 OCR（EasyOCR / 等）。"
+            "建议在 requirements.txt 中安装：rapidocr>=3.0 与 onnxruntime（或 onnxruntime-cpu）。"
+            "若仍无可用 OCR 引擎，将主要依赖 PDF 内嵌文字 + 下方 pypdf 回退逻辑。---"
+        )
+        pipeline_options.ocr_options = OcrAutoOptions(force_full_page_ocr=True)
 
     # 云端无 GPU 时避免走 auto/cuda；并限制线程，降低内存峰值
     pipeline_options.accelerator_options = AcceleratorOptions(
@@ -150,7 +172,6 @@ def _document_converter_for_chinese_pdf() -> DocumentConverter:
         device=AcceleratorDevice.CPU,
     )
 
-    # format_options 的值必须是 PdfFormatOption，不能直接传 pipeline_options
     return DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options),

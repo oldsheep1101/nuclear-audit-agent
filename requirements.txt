@@ -1,9 +1,11 @@
-# Docling 的 RapidOCR 后端需要可 import 的包名「rapidocr」+ 推理引擎「onnxruntime」
-# 勿使用 rapidocr-onnxruntime（与 Docling 的 import 不一致，云端常会报未安装 RapidOCR）
+# Docling RapidOCR：必须能 `import rapidocr` + `import onnxruntime`（与包名 rapidocr-onnxruntime 无关）
+# Linux 云端若 onnxruntime 装不上，可改为只保留：onnxruntime-cpu>=1.17.0
+# 可选兜底（体积大、构建慢）：easyocr —— 仅当 rapidocr/onnxruntime 在云端装不上时再手动加入
 streamlit
 langchain-openai
 langchain-huggingface
 langchain-community
+langchain-text-splitters
 chromadb
 python-dotenv
 docling
