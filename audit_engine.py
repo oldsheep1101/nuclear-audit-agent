@@ -19,9 +19,18 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 
 # --- 核心引入：Docling 解析引擎 ---
+from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
 from docling.datamodel.base_models import InputFormat
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.pipeline_options import RapidOcrOptions, ThreadedPdfPipelineOptions
+
+# --- 显式指定 OCR 配置类：优先尝试旧包路径，不存在则用 datamodel（当前版本仅有后者）---
+try:
+    from docling.ocr.rapid_ocr_engine import (  # type: ignore[import-not-found]
+        RapidOcrOptions as RapidOcrOptionsEngine,
+    )
+except ImportError:
+    RapidOcrOptionsEngine = RapidOcrOptions
 
 # 配置常量
 DEFAULT_PDF = "data/nuclear_standard.pdf"
@@ -124,13 +133,24 @@ def _extract_text_pypdf(pdf_path: str) -> str:
 
 
 def _document_converter_for_chinese_pdf() -> DocumentConverter:
-    """很多中文标准 PDF 内嵌字形映射错误，复制出来是俄文/乱码；整页 OCR（中文）可绕过错误文字层。"""
+    """很多中文标准 PDF 内嵌字形映射错误；整页 RapidOCR + 强制 CPU/限线程，避免无 GPU 环境报错。"""
     pipeline_options = ThreadedPdfPipelineOptions()
-    pipeline_options.ocr_options = RapidOcrOptions(
-        lang=["chinese", "english"],
+    pipeline_options.do_ocr = True
+    pipeline_options.images_scale = 2.0
+
+    ocr_options = RapidOcrOptionsEngine(
+        lang=["ch_sim", "en"],
         force_full_page_ocr=True,
     )
-    pipeline_options.images_scale = 2.0
+    pipeline_options.ocr_options = ocr_options
+
+    # 云端无 GPU 时避免走 auto/cuda；并限制线程，降低内存峰值
+    pipeline_options.accelerator_options = AcceleratorOptions(
+        num_threads=2,
+        device=AcceleratorDevice.CPU,
+    )
+
+    # format_options 的值必须是 PdfFormatOption，不能直接传 pipeline_options
     return DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options),

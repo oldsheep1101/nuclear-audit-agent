@@ -1,3 +1,5 @@
+# Docling 的 RapidOCR 后端需要可 import 的包名「rapidocr」+ 推理引擎「onnxruntime」
+# 勿使用 rapidocr-onnxruntime（与 Docling 的 import 不一致，云端常会报未安装 RapidOCR）
 streamlit
 langchain-openai
 langchain-huggingface
@@ -6,5 +8,6 @@ chromadb
 python-dotenv
 docling
 sentence-transformers
-rapidocr-onnxruntime
-onnxruntime
+rapidocr>=3.0
+onnxruntime>=1.17.0
+pypdf
