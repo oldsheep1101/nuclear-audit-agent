@@ -6,3 +6,5 @@ chromadb
 python-dotenv
 docling
 sentence-transformers
+rapidocr-onnxruntime
+onnxruntime
